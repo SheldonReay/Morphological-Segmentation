@@ -69,14 +69,11 @@ def readLangs(lang1, lang2, reverse=False):
     data = []
     for line in lines:
         line = line.split(" | ")
-        ortho = re.sub("([\(\[]).*?([\)\]])", "\g<1>\g<2>", line[2])
-        ortho = ortho.replace("[]","-")[:-1]
+        ortho = removeTags(line[2])
         data.append(line[0] + "\t" + ortho)
-    # Split every line into pairs and normalize
-    #print(data)
+
     pairs = [[normalizeString(s) for s in l.split('\t')] for l in data]
 
-    # Reverse pairs, make Lang instances
     if reverse:
         pairs = [list(reversed(p)) for p in pairs]
         input_lang = Lang(lang2)
@@ -98,6 +95,12 @@ def filterPair(p):
 def filterPairs(pairs):
     return [pair for pair in pairs if filterPair(pair)]
 
+
+def removeTags(segments):
+    ortho = re.sub("([\(\[]).*?([\)\]])", "\g<1>\g<2>", segments)
+    ortho = ortho.replace("[]","-")[:-1]
+
+    return ortho
 
 
 def prepareData(lang1, lang2, reverse=False):
@@ -133,8 +136,8 @@ class EncoderRNN(nn.Module):
         self.bidirectional = bidirectional
 
 
-        self.embedding = nn.Embedding(input_size, 20)
-        self.gru = nn.GRU(20, self.hidden_var, num_layers=self.n_layers, bidirectional= self.bidirectional)
+        self.embedding = nn.Embedding(input_size, hidden_size)
+        self.gru = nn.GRU(hidden_size, self.hidden_var, num_layers=self.n_layers, bidirectional= self.bidirectional)
 
     def forward(self, input, hidden):
         #print("input", input.shape, "hidden", hidden.shape)
@@ -420,8 +423,7 @@ def evalWords(encoder, decoder, n, printWords=False):
     correct = 0
     for line in lines:
         line = line.split(" | ")
-        ortho = re.sub("([\(\[]).*?([\)\]])", "\g<1>\g<2>", line[2])
-        ortho = ortho.replace("[]","-")[:-1]
+        ortho = removeTags(line[2])
         data.append(line[0] + "\t" + ortho)
     # Split every line into pairs and normalize
     for i in range(n):
@@ -442,13 +444,12 @@ def evalWords(encoder, decoder, n, printWords=False):
             print('')
 
     print("Accuracy: ", correct/n)
-
+    return (correct/n)
 
 hidden_size = 256
 iterations = len(pairs)
-epochs = 20
+epochs = 5
 encoder = EncoderRNN(input_lang.n_chars, hidden_size, 2, True).to(device)
-#decoder1 = DecoderRNN(hidden_size, output_lang.n_chars).to(device)
 attn_decoder = AttnDecoderRNN(hidden_size, output_lang.n_chars, dropout_p=0.3, n_layers=2, bidirectional=True).to(device)
 
 
@@ -456,13 +457,15 @@ print(encoder)
 print(attn_decoder)
 print(len(pairs))
 print("Training Model...")
+validationAccuracy = []
 for epoch in range(epochs):
     print(f"Epoch: {epoch}")
-    loss = trainIters(encoder, attn_decoder, iterations, print_every=1000)
-    evalWords(encoder, attn_decoder, 100, printWords=False)
+    loss = trainIters(encoder, attn_decoder, 1000, print_every=100)
+    valAcc = evalWords(encoder, attn_decoder, 100, printWords=False)
+    validationAccuracy.append(valAcc)
 
 showPlot(loss)
-
+showPlot(validationAccuracy)
 evaluateRandomly(encoder, attn_decoder)
 
 evalWords(encoder, attn_decoder, 100, printWords=True)
