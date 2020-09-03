@@ -18,15 +18,15 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 SOS_token = 0
 EOS_token = 1
-
+PAD_token = 2
 
 class Lang:
     def __init__(self, name):
         self.name = name
         self.char2index = {}
         self.char2count = {}
-        self.index2char = {0: "<", 1: ">"}
-        self.n_chars = 2  # Count SOS and EOS
+        self.index2char = {0: "<", 1: ">", 2: "+"}
+        self.n_chars = 3  # Count SOS and EOS
 
     def addWord(self, word):
         for character in list(word):
@@ -166,8 +166,8 @@ class AttnDecoderRNN(nn.Module):
         self.bidirectional = bidirectional
 
         self.embedding = nn.Embedding(self.output_size, self.hidden_size)
-        self.attn = nn.Linear(self.hidden_size * 2, self.max_length)
-        self.attn_combine = nn.Linear(self.hidden_size * 2, self.hidden_size)
+        self.attn = nn.Linear(self.hidden_size*2, self.max_length)
+        self.attn_combine = nn.Linear(self.hidden_size*2, self.hidden_size)
         self.dropout = nn.Dropout(self.dropout_p)
         self.gru = nn.GRU(self.hidden_size, self.hidden_size, num_layers= self.n_layers)
         self.out = nn.Linear(self.hidden_size, self.output_size)
@@ -191,13 +191,13 @@ class AttnDecoderRNN(nn.Module):
             decoder_h = decoder_h_cat.view((self.n_layers, 1, self.hidden_size))  # hidden_size=256   
 
             hidden_gru = decoder_h
-        
+
+
         attn_weights = F.softmax(
             self.attn(torch.cat((embedded[0], hidden_gru[0]), 1)), dim=1)
-        #print(attn_weights.shape)
+        
         attn_applied = torch.bmm(attn_weights.unsqueeze(0),
                                  encoder_outputs.unsqueeze(0))
-        
         output = torch.cat((embedded[0], attn_applied[0]), 1)
         output = self.attn_combine(output).unsqueeze(0)
         output = F.relu(output)
@@ -217,6 +217,8 @@ def indexesFromWord(lang, word):
 
 def tensorFromWord(lang, word):
     indexes = indexesFromWord(lang, word)
+    # while(len(indexes)!=MAX_LENGTH-1):
+    #     indexes.append(PAD_token)
     indexes.append(EOS_token)
     return torch.tensor(indexes, dtype=torch.long, device=device).view(-1, 1)
 
@@ -254,12 +256,14 @@ def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, deco
     encoder_outputs = torch.zeros(max_length, encoder.hidden_size, device=device)
 
     loss = 0
-    #print("IT: ", input_tensor)
-    #print("TT: ", target_tensor)
+    #print("InputTensor: ", input_tensor.shape)
+    #print("TargeTensor: ", target_tensor.shape)
     for ei in range(input_length):
+        #print(input_tensor[ei])
         encoder_output, encoder_hidden = encoder(
             input_tensor[ei], encoder_hidden)
         encoder_outputs[ei] = encoder_output[0, 0]
+        #print(encoder_hidden.shape)
 
     decoder_input = torch.tensor([[SOS_token]], device=device)
 
@@ -285,6 +289,7 @@ def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, deco
             decoder_input = topi.squeeze().detach()  # detach from history as input
             #print(topv, topi, target_tensor[di])
             loss += criterion(decoder_output, target_tensor[di])
+
             if decoder_input.item() == EOS_token:
                 break
 
@@ -314,7 +319,7 @@ def timeSince(since, percent):
     return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
 
 
-def trainIters(encoder, decoder, n_iters, print_every=1000, plot_every=100, learning_rate=0.001):
+def trainIters(encoder, decoder, n_iters, print_every=1000, plot_every=100, learning_rate=0.001, batch_size=64):
     start = time.time()
     plot_losses = []
     print_loss_total = 0  # Reset every print_every
@@ -324,11 +329,15 @@ def trainIters(encoder, decoder, n_iters, print_every=1000, plot_every=100, lear
     training_pairs = [tensorsFromPair(random.choice(pairs))
                       for i in range(n_iters)]
     criterion = nn.CrossEntropyLoss()#nn.NLLLoss()
-    
+    t = torch.zeros([MAX_LENGTH, 1], dtype=torch.long)
     for iter in range(1, n_iters + 1):
+        
+
         training_pair = training_pairs[iter - 1]
-        input_tensor = training_pair[0]
+        input_tensor  = training_pair[0]
         target_tensor = training_pair[1]
+        #print(p.shape)
+        #print(target_tensor.shape)
 
         loss = train(input_tensor, target_tensor, encoder,
                      decoder, encoder_optimizer, decoder_optimizer, criterion)
