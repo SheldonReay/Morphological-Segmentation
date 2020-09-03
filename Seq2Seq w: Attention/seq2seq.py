@@ -137,19 +137,22 @@ class EncoderRNN(nn.Module):
 
 
         self.embedding = nn.Embedding(input_size, hidden_size)
-        self.gru = nn.GRU(hidden_size, self.hidden_var, num_layers=self.n_layers, bidirectional= self.bidirectional)
+        self.lstm = nn.LSTM(hidden_size,self.hidden_var, num_layers=self.n_layers, bidirectional=self.bidirectional)
 
     def forward(self, input, hidden):
         #print("input", input.shape, "hidden", hidden.shape)
         embedded = self.embedding(input).view(1, 1, -1)
         output = embedded
-        output, hidden = self.gru(output, hidden)
+        output, hidden = self.lstm(output, hidden)
         #print("output:: ", output.shape, "hidden:: ", hidden.shape)
 
         return output, hidden
 
     def initHidden(self):
-        return torch.zeros(self.n_directions * self.n_layers, 1, self.hidden_var, device=device)
+        h_state = torch.zeros(self.n_layers * self.n_directions, 1, self.hidden_var)
+        c_state = torch.zeros(self.n_layers * self.n_directions, 1, self.hidden_var)
+        hidden = (h_state, c_state)
+        return hidden
 
 
 
@@ -169,7 +172,7 @@ class AttnDecoderRNN(nn.Module):
         self.attn = nn.Linear(self.hidden_size*2, self.max_length)
         self.attn_combine = nn.Linear(self.hidden_size*2, self.hidden_size)
         self.dropout = nn.Dropout(self.dropout_p)
-        self.gru = nn.GRU(self.hidden_size, self.hidden_size, num_layers= self.n_layers)
+        self.lstm = nn.LSTM(self.hidden_size, self.hidden_size, num_layers=self.n_layers)
         self.out = nn.Linear(self.hidden_size, self.output_size)
 
     def forward(self, input, hidden, encoder_outputs):
@@ -177,37 +180,49 @@ class AttnDecoderRNN(nn.Module):
         embedded = self.embedding(input).view(1, 1, -1)
         embedded = self.dropout(embedded)
         self.hidden = hidden 
-        decoder_h = hidden
-        hidden_shape = decoder_h.shape[0]
+
         hidden_h_rows = ()
         hidden_c_rows = ()
-        # h_state
+
+        decoder_h, decoder_c = hidden
+        hidden_shape = decoder_h.shape[0]
+
+                # h_state
         for x in range(0, hidden_shape):
             hidden_h_rows += (decoder_h[x],)
+
+                # c_state
+        for x in range(0, hidden_shape):
+            hidden_c_rows += (decoder_c[x],)
 
         if self.bidirectional:
             decoder_h_cat = torch.cat(hidden_h_rows, 1)
             # Make sure the h_dim size is compatible with num_layers with concatenation.
             decoder_h = decoder_h_cat.view((self.n_layers, 1, self.hidden_size))  # hidden_size=256   
 
-            hidden_gru = decoder_h
+            decoder_c_cat = torch.cat(hidden_c_rows, 1)
+            decoder_c = decoder_c_cat.view((self.n_layers, 1, self.hidden_size))  # hidden_size=256
+            hidden_lstm = (decoder_h, decoder_c)
 
 
         attn_weights = F.softmax(
-            self.attn(torch.cat((embedded[0], hidden_gru[0]), 1)), dim=1)
+            self.attn(torch.cat((embedded[0], hidden_lstm[0][0]), 1)), dim=1)
         
         attn_applied = torch.bmm(attn_weights.unsqueeze(0),
                                  encoder_outputs.unsqueeze(0))
         output = torch.cat((embedded[0], attn_applied[0]), 1)
         output = self.attn_combine(output).unsqueeze(0)
         output = F.relu(output)
-        output, hidden = self.gru(output, hidden_gru)
+        output, hidden = self.lstm(output, hidden_lstm)
         
         output = F.log_softmax(self.out(output[0]), dim=1)
         return output, hidden, attn_weights
 
     def initHidden(self):
-        return torch.zeros(self.n_layers * 1, 1, self.hidden_var, device=device)
+        h_state = torch.zeros(self.n_layers * 1, 1, self.hidden_var)
+        c_state = torch.zeros(self.n_layers * 1, 1, self.hidden_var)
+        hidden = (h_state, c_state)
+        return hidden
 
 
 
@@ -457,19 +472,19 @@ def evalWords(encoder, decoder, n, printWords=False):
 
 hidden_size = 256
 iterations = len(pairs)
-epochs = 5
+epochs = 20
 encoder = EncoderRNN(input_lang.n_chars, hidden_size, 2, True).to(device)
 attn_decoder = AttnDecoderRNN(hidden_size, output_lang.n_chars, dropout_p=0.3, n_layers=2, bidirectional=True).to(device)
 
 
 print(encoder)
 print(attn_decoder)
-print(len(pairs))
+print(iterations)
 print("Training Model...")
 validationAccuracy = []
 for epoch in range(epochs):
     print(f"Epoch: {epoch}")
-    loss = trainIters(encoder, attn_decoder, 1000, print_every=100)
+    loss = trainIters(encoder, attn_decoder, iterations, print_every=100)
     valAcc = evalWords(encoder, attn_decoder, 100, printWords=False)
     validationAccuracy.append(valAcc)
 
