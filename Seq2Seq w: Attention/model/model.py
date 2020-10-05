@@ -20,7 +20,9 @@ EOS_token = 1
 PAD_token = 2
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
+'''
+    Encoder unit, specifies number of layers and bidirectionality
+'''
 class EncoderRNN(nn.Module):
     def __init__(self, input_size, hidden_size, n_layers=1, bidirectional=False):
         super(EncoderRNN, self).__init__()
@@ -50,7 +52,9 @@ class EncoderRNN(nn.Module):
         hidden = (h_state, c_state)
         return hidden
 
-
+'''
+    Attention Decoder unit, specifies number of layers and bidirectionality, dropout 
+'''
 class AttnDecoderRNN(nn.Module):
 
     def __init__(self, hidden_size, output_size, dropout_p=0.3, max_length=MAX_LENGTH, n_layers=1, bidirectional=False):
@@ -120,6 +124,9 @@ class AttnDecoderRNN(nn.Module):
         return hidden
 
 
+'''
+    Functions to convert words into tensors
+'''
 def indexesFromWord(lang, word):
     return [lang.char2index[char] for char in list(word)]
 
@@ -139,7 +146,9 @@ def tensorsFromPair(pair):
 
 teacher_forcing_ratio = 0.5
 
-
+'''
+   Training function, specifies the source, target, encoder, deocoder + optimisers and the loss function
+'''
 def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, max_length=MAX_LENGTH):
     encoder_hidden = encoder.initHidden()
 
@@ -210,7 +219,9 @@ def timeSince(since, percent):
     rs = es - s
     return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
 
-
+'''
+    Training iteration function, specifies the number of iterations
+'''
 def trainIters(encoder, decoder, n_iters, print_every=1000, plot_every=100, learning_rate=0.001, batch_size=64):
     start = time.time()
     plot_losses = []
@@ -246,7 +257,9 @@ def trainIters(encoder, decoder, n_iters, print_every=1000, plot_every=100, lear
 
     return plot_losses
 
-
+'''
+    Specify the hidden size, number of iterations and epochs
+'''
 d = data.data()
 input_lang, output_lang, pairs = d.prepareData('zulu', 'segmented', False)
 hidden_size = 256
@@ -262,6 +275,10 @@ print(attn_decoder)
 print(iterations)
 print("Training Model...")
 validationAccuracy = []
+
+'''
+    Training loop over N_Epochs
+'''
 for epoch in range(epochs):
     print(f"Epoch: {epoch}")
     loss = trainIters(encoder, attn_decoder, iterations, print_every=100)

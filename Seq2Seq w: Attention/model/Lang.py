@@ -1,3 +1,7 @@
+'''
+    Class for input and output languages, in this case it would be the source and target (segmented) words
+'''
+
 class Lang:
     def __init__(self, name):
         self.name = name

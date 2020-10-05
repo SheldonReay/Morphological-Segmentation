@@ -50,7 +50,9 @@ class evaluate:
         input_tensor = tensorFromWord(input_lang, pair[0])
         target_tensor = tensorFromWord(output_lang, pair[1])
         return (input_tensor, target_tensor)
-
+    '''
+        Evaluates model between epochs
+    '''
     def evaluateModel(self, encoder, decoder, sentence, max_length=MAX_LENGTH):
         with torch.no_grad():
             input_tensor = self.tensorFromWord(self.input_lang, sentence)
@@ -87,7 +89,9 @@ class evaluate:
                 decoder_input = topi.squeeze().detach()
 
             return decoded_words, decoder_attentions[:di + 1]
-
+    '''
+        Evaluates words in the validation set randomly
+    '''
     def evaluateRandomly(self, encoder, decoder, pairs, n=100,):
         for i in range(n):
             pair = random.choice(pairs)
@@ -102,6 +106,9 @@ class evaluate:
             print('<', output[:-1])
             print('')
 
+    '''
+        Evaluates words from the test set 
+    '''
     def evalWords(self, encoder, decoder, n, printWords=False):
         lines = open('../../Data/Zulu/zulu.clean.test.conll', encoding='utf-8').\
             read().strip().split('\n')
@@ -150,6 +157,9 @@ class evaluate:
 
         plt.show()
 
+    '''
+        Shows attention for a segmented word
+    '''
     def evaluateAndShowAttention(self, input_sentence, encoder, attn_decoder):
         output_words, attentions = self.evaluateModel(
             encoder, attn_decoder, input_sentence)

@@ -35,7 +35,9 @@ class data:
 
     def printWord(self):
         print("Word")
-
+    '''
+        Reads the datasets and executes preprocessing
+    '''
     def readLangs(self, lang1, lang2, reverse=False):
         print("Reading lines...")
 
@@ -72,7 +74,9 @@ class data:
         ortho = ortho.replace("[]", "-")[:-1]
 
         return ortho
-
+    '''
+        Loads data from the dataset, intialises both source and target languages
+    '''
     def prepareData(self, lang1, lang2, reverse=False):
         input_lang, output_lang, pairs = self.readLangs(lang1, lang2, reverse)
         print("Read %s sentence pairs" % len(pairs))
